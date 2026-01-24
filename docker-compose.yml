@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Backend - DollarBack (Node.js + Fastify)
+  backend:
+    build:
+      context: ./DollarBack
+      dockerfile: Dockerfile
+    container_name: dollaralert-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HOST=0.0.0.0
+      - FRONTEND_URL=http://localhost:5173
+      - LOG_LEVEL=info
+    volumes:
+      - ./DollarBack/src:/app/src
+    networks:
+      - dollaralert-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend - DollarUI (Vue.js 3 + Vite)
+  frontend:
+    build:
+      context: ./DollarUi
+      dockerfile: Dockerfile
+      target: development
+    container_name: dollaralert-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./DollarUi:/app
+      - /app/node_modules
+    networks:
+      - dollaralert-network
+    depends_on:
+      - backend
+
+  # Redis for caching and session management (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: dollaralert-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dollaralert-network
+    command: redis-server --appendonly yes
+    profiles:
+      - cache
+
+networks:
+  dollaralert-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
