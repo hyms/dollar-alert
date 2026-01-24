@@ -17,7 +17,13 @@
 
       <v-row class="mt-4">
         <v-col cols="12" md="6" lg="4" v-for="rate in exchangeRates" :key="rate.id">
-          <RateCard :rate="rate" />
+          <RateCard 
+            :type="rate.type"
+            :buyPrice="rate.buy_price"
+            :sellPrice="rate.sell_price"
+            :averagePrice="rate.average_price"
+            :changePercentage="rate.change_percentage_24h"
+          />
         </v-col>
       </v-row>
 
@@ -57,7 +63,6 @@
 import { ref, onMounted } from 'vue'
 import type { ExchangeRate } from '@/types'
 import RateCard from '@/components/dashboard/RateCard.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -95,7 +100,7 @@ const mockRates: ExchangeRate[] = [
 ]
 
 onMounted(async () => {
-  await settingsStore.initializeApp()
+  await settingsStore.loadSettings()
   exchangeRates.value = mockRates
 })
 </script>

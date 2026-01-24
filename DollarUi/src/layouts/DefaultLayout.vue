@@ -13,5 +13,5 @@
 
 <script setup lang="ts">
 import AppToolbar from '@/components/shared/AppToolbar.vue'
-import AppFooter from '@/components/shared/AppFooter.vue'
+import AppFooter from '@/components/shared/Footer.vue'
 </script>

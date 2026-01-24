@@ -109,7 +109,6 @@
 import { ref } from 'vue'
 import AuthGuard from '@/components/admin/AuthGuard.vue'
 import ConfigForm from '@/components/admin/ConfigForm.vue'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import type { UserSubscription } from '@/types'
 
 const loading = ref(false)

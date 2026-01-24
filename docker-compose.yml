@@ -1,54 +1,9 @@
-version: '3.8'
+
 
 services:
-  # Backend - DollarBack (Node.js + Fastify)
-  backend:
-    build:
-      context: ./DollarBack
-      dockerfile: Dockerfile
-    container_name: dollaralert-backend
-    restart: unless-stopped
-    ports:
-      - "${BACKEND_PORT:-3000}:3000"
-    env_file: .env
-    environment:
-      - NODE_ENV=development
-      - PORT=3000
-      - HOST=0.0.0.0
-      - FRONTEND_URL=http://localhost:5173
-      - LOG_LEVEL=info
-    volumes:
-      - ./DollarBack/src:/app/src
-    networks:
-      - dollaralert-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Frontend - DollarUI (Vue.js 3 + Vite)
-  frontend:
-    build:
-      context: ./DollarUi
-      dockerfile: Dockerfile
-      target: development
-    container_name: dollaralert-frontend
-    restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-5173}:5173"
-    environment:
-      - VITE_API_URL=http://localhost:3000
-      - CHOKIDAR_USEPOLLING=true
-    volumes:
-      - ./DollarUi:/app
-      - /app/node_modules
-    networks:
-      - dollaralert-network
-    depends_on:
-      - backend
-
-  # Redis for caching and session management (optional)
+  # =================================
+  # Redis Service (Caching & Sessions)
+  # =================================
   redis:
     image: redis:7-alpine
     container_name: dollaralert-redis
@@ -60,13 +15,214 @@ services:
     networks:
       - dollaralert-network
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles:
       - cache
+      - production
 
+  # =================================
+  # Backend Service (Node.js + Fastify)
+  # =================================
+  backend:
+    build:
+      context: ./DollarBack
+      dockerfile: Dockerfile
+      target: development
+      args:
+        NODE_ENV: development
+    container_name: dollaralert-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      HOST: 0.0.0.0
+      FRONTEND_URL: http://localhost:${FRONTEND_PORT:-5173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Database (Supabase)
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      # Telegram
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      # Web Push
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_EMAIL: ${VAPID_EMAIL}
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+    volumes:
+      - ./DollarBack/src:/app/src
+      - /app/node_modules
+    networks:
+      - dollaralert-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - development
+
+  backend-prod:
+    build:
+      context: ./DollarBack
+      dockerfile: Dockerfile
+      target: production
+      args:
+        NODE_ENV: production
+    container_name: dollaralert-backend-prod
+    restart: always
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      FRONTEND_URL: ${FRONTEND_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_EMAIL: ${VAPID_EMAIL}
+      JWT_SECRET: ${JWT_SECRET}
+      BCRYPT_ROUNDS: 12
+    networks:
+      - dollaralert-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - production
+
+  # =================================
+  # Frontend Service (Vue.js 3 + Vite)
+  # =================================
+  frontend:
+    build:
+      context: ./DollarUi
+      dockerfile: Dockerfile
+      target: development
+      args:
+        NODE_ENV: development
+        VITE_API_URL: http://localhost:${BACKEND_PORT:-3000}
+    container_name: dollaralert-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      VITE_API_URL: http://localhost:${BACKEND_PORT:-3000}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      VITE_ADMIN_URL_PATH: ${VITE_ADMIN_URL_PATH:-/admin}
+      VITE_APP_TITLE: ${VITE_APP_TITLE:-DollarAlert 🇧🇴}
+      VITE_APP_DESCRIPTION: ${VITE_APP_DESCRIPTION:-Monitoreo de tasas de cambio USD/BOB en tiempo real}
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./DollarUi:/app
+      - /app/node_modules
+    networks:
+      - dollaralert-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - development
+
+  frontend-prod:
+    build:
+      context: ./DollarUi
+      dockerfile: Dockerfile
+      target: production
+    container_name: dollaralert-frontend-prod
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-80}:5173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      VITE_ADMIN_URL_PATH: ${VITE_ADMIN_URL_PATH:-/admin}
+      VITE_APP_TITLE: ${VITE_APP_TITLE:-DollarAlert}
+      VITE_APP_DESCRIPTION: ${VITE_APP_DESCRIPTION}
+    networks:
+      - dollaralert-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend-prod:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - production
+
+# =================================
+# Networks
+# =================================
 networks:
   dollaralert-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
+# =================================
+# Volumes
+# =================================
 volumes:
   redis_data:
     driver: local

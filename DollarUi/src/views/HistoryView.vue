@@ -113,7 +113,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { HistoricalRate } from '@/types'
-import DefaultLayout from '@/layouts/DefaultLayout.vue'
+
 
 const loading = ref(false)
 const historicalRates = ref<HistoricalRate[]>([])
