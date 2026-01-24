@@ -123,34 +123,35 @@ INSERT INTO admin_configs (
     scraping_sources,
     maintenance_mode
 ) VALUES (
-    'admin',
-    '$2a$10$rQZ8ZK9A8K8K8K8K8K8K8O8K8K8K8K8K8K8K8K8K8K8K8K8K8K8K8K8K8K', -- Change this in production
-    '[
-        {
-            "id": "1",
-            "name": "Banco Central de Bolivia",
-            "url": "https://www.bcb.gob.bo/",
-            "selector": ".tipo-cambio-",
-            "currency": "USD",
-            "frequency": "0 */6 * * *",
-            "is_active": true,
-            "rate_type": "official",
-            "created_at": "' || NOW()::text || '"
-        },
-        {
-            "id": "2",
-            "name": "Dolar Bolivia",
-            "url": "https://dolarbolivia.com/",
-            "selector": ".col-md-6 .card .card-body .h3",
-            "currency": "USD",
-            "frequency": "0 */2 * * *",
-            "is_active": true,
-            "rate_type": "parallel",
-            "created_at": "' || NOW()::text || '"
-        }
-    ]'::jsonb,
-    false
-) ON CONFLICT DO NOTHING;
+  'admin',
+  '$2a$10$rQZ8ZK9A8K8K8K8K8K8K8O8K8K8K8K8K8K8K8K8K8K8K8K8K8K8K8K8K', -- change in prod
+  jsonb_build_array(
+    jsonb_build_object(
+      'id', '1',
+      'name', 'Banco Central de Bolivia',
+      'url', 'https://www.bcb.gob.bo/',
+      'selector', '.tipo-cambio-',
+      'currency', 'USD',
+      'frequency', '0 */6 * * *',
+      'is_active', true,
+      'rate_type', 'official',
+      'created_at', to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SSOF') -- or use NOW()::text
+    ),
+    jsonb_build_object(
+      'id', '2',
+      'name', 'Dolar Blue Bolivia',
+      'url', 'https://www.dolarbluebolivia.click/',
+      'selector', '#usdRate',
+      'currency', 'USD',
+      'frequency', '0 */2 * * *',
+      'is_active', true,
+      'rate_type', 'parallel',
+      'created_at', to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SSOF')
+    )
+  ),
+  false
+)
+ON CONFLICT DO NOTHING;
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
