@@ -1,6 +1,5 @@
 <template>
-  <DefaultLayout>
-    <v-container fluid class="pa-4">
+  <v-container fluid class="pa-4">
       <v-row>
         <v-col cols="12">
           <v-card>
@@ -101,8 +100,7 @@
           </v-col>
         </v-row>
       </AuthGuard>
-    </v-container>
-  </DefaultLayout>
+  </v-container>
 </template>
 
 <script setup lang="ts">

@@ -1,0 +1,100 @@
+
+
+services:
+  # =================================
+  # Test Database (PostgreSQL for testing)
+  # =================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: dollaralert-postgres-test
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: dollaralert_test
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - dollaralert-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d dollaralert_test"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    profiles:
+      - testing
+
+  # =================================
+  # Test Redis (override for testing)
+  # =================================
+  redis-test:
+    image: redis:7-alpine
+    container_name: dollaralert-redis-test
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    networks:
+      - dollaralert-test-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - testing
+
+  # =================================
+  # MinIO (S3-compatible for testing)
+  # =================================
+  minio:
+    image: minio/minio:latest
+    container_name: dollaralert-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    networks:
+      - dollaralert-test-network
+    command: server /data --console-address ":9001"
+    profiles:
+      - testing
+
+  # =================================
+  # Create Test Buckets
+  # =================================
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    container_name: dollaralert-create-buckets
+    networks:
+      - dollaralert-test-network
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias setlocal s3 http://minio:9000;
+      /usr/bin/mc mb s3/test-uploads;
+      /usr/bin/mc mb s3/test-backups;
+      /usr/bin/mc mb s3/test-logs;
+      exit 0;
+      "
+    profiles:
+      - testing
+
+networks:
+  dollaralert-test-network:
+    driver: bridge
+
+volumes:
+  postgres_test_data:
+    driver: local
+  minio_data:
+    driver: local

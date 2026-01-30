@@ -1,6 +1,5 @@
 <template>
-  <DefaultLayout>
-    <v-container fluid class="pa-4">
+  <v-container fluid class="pa-4">
       <v-row>
         <v-col cols="12">
           <v-card>
@@ -55,17 +54,21 @@
           </v-card>
         </v-col>
       </v-row>
-    </v-container>
-  </DefaultLayout>
+  </v-container>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import type { ExchangeRate } from '@/types'
 import RateCard from '@/components/dashboard/RateCard.vue'
 import { useSettingsStore } from '@/stores/settings'
 
+// TODO: Replace mock data with API call
+const API_URL = import.meta.env.VITE_API_URL
+
 const settingsStore = useSettingsStore()
+const authStore = useAuthStore()
 const exchangeRates = ref<ExchangeRate[]>([])
 
 const mockRates: ExchangeRate[] = [
@@ -99,8 +102,33 @@ const mockRates: ExchangeRate[] = [
   }
 ]
 
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+const fetchRates = async () => {
+  loading.value = true
+  error.value = null
+  
+  try {
+    const response = await fetch(`${API_URL}/api/rates/current`)
+    if (!response.ok) {
+      throw new Error('Error al obtener las tasas')
+    }
+    
+    const data = await response.json()
+    exchangeRates.value = data.length > 0 ? data : mockRates
+  } catch (err) {
+    console.error('Error fetching rates:', err)
+    error.value = err instanceof Error ? err.message : 'Error desconocido'
+    // Fallback a mock data si la API falla
+    exchangeRates.value = mockRates
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(async () => {
   await settingsStore.loadSettings()
-  exchangeRates.value = mockRates
+  await fetchRates()
 })
 </script>

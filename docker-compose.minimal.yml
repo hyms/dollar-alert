@@ -1,0 +1,52 @@
+# Minimal Development Docker Compose
+services:
+  # Backend
+  backend:
+    image: node:20-alpine
+    working_dir: /app
+    container_name: dollaralert-backend-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./DollarBack:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+    command: npm run dev
+    networks:
+      - dollaralert-network
+
+  # Frontend  
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    container_name: dollaralert-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./DollarUi:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:3000
+    command: npm run dev
+    depends_on:
+      - backend
+    networks:
+      - dollaralert-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: dollaralert-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - dollaralert-network
+
+networks:
+  dollaralert-network:
+    driver: bridge

@@ -23,25 +23,33 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     
     try {
-      // This would connect to DollarBack API
-      // For demo purposes, we'll simulate auth
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username: email, password })
+      })
       
-      if (email === 'admin@example.com' && password === 'admin123') {
-        user.value = {
-          id: '1',
-          email: email,
-          role: 'admin',
-          is_active: true
-        }
-        token.value = 'demo_admin_token'
-        localStorage.setItem('auth_token', token.value)
-        localStorage.setItem('user', JSON.stringify(user.value))
-      } else {
-        error.value = 'Credenciales inválidas'
+      if (!response.ok) {
+        throw new Error('Credenciales inválidas')
       }
+      
+      const data = await response.json()
+      
+      user.value = {
+        id: '1',
+        email: email,
+        role: 'admin',
+        is_active: true
+      }
+      token.value = data.token
+      if (token.value) {
+        localStorage.setItem('auth_token', token.value)
+      }
+      localStorage.setItem('user', JSON.stringify(user.value))
     } catch (err) {
-      error.value = 'Error de autenticación'
+      error.value = err instanceof Error ? err.message : 'Error de autenticación'
       console.error('Login error:', err)
     } finally {
       loading.value = false

@@ -47,29 +47,35 @@ const MockedCreateClient = createClient as jest.MockedFunction<typeof createClie
 
 describe('Supabase Repositories', () => {
   let mockSupabaseClient: any
+  let mockQuery: any
 
   beforeEach(() => {
     jest.clearAllMocks()
     
-    // Create a comprehensive mock for the Supabase client
+    // Create a shared mock query that maintains state across chain calls
+    // Each method returns the query object to allow chaining
+    mockQuery = {
+      select: jest.fn().mockReturnThis(),
+      insert: jest.fn().mockReturnThis(),
+      upsert: jest.fn().mockReturnThis(),
+      update: jest.fn().mockReturnThis(),
+      delete: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
+      lte: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      range: jest.fn().mockReturnThis(),
+      single: jest.fn().mockReturnThis()
+    }
+    
+    // Override then to allow awaiting the query
+    mockQuery.then = jest.fn((callback: any) => {
+      return Promise.resolve(callback({ data: null, error: null }))
+    })
+    
     mockSupabaseClient = {
-      from: jest.fn((table: string) => {
-        const mockQuery = {
-          select: jest.fn().mockReturnThis(),
-          insert: jest.fn().mockReturnThis(),
-          upsert: jest.fn().mockReturnThis(),
-          update: jest.fn().mockReturnThis(),
-          delete: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          gte: jest.fn().mockReturnThis(),
-          lte: jest.fn().mockReturnThis(),
-          order: jest.fn().mockReturnThis(),
-          limit: jest.fn().mockReturnThis(),
-          range: jest.fn().mockReturnThis(),
-          single: jest.fn().mockReturnThis()
-        }
-        return mockQuery
-      })
+      from: jest.fn().mockReturnValue(mockQuery)
     }
     
     MockedCreateClient.mockReturnValue(mockSupabaseClient)
@@ -86,26 +92,26 @@ describe('Supabase Repositories', () => {
       it('should fetch current exchange rates', async () => {
         const mockRates = [createMockRate('official'), createMockRate('parallel')]
         
-        mockSupabaseClient.from().select().order().limit().single.mockResolvedValue({
-          data: mockRates,
-          error: null
+        mockQuery.limit.mockReturnValue({
+          ...mockQuery,
+          then: (resolve: any) => resolve({ data: mockRates, error: null })
         })
 
         const result = await repository.getCurrentRates()
 
         expect(result).toEqual(mockRates)
         expect(mockSupabaseClient.from).toHaveBeenCalledWith('exchange_rates')
-        expect(mockSupabaseClient.from().select).toHaveBeenCalledWith('*')
-        expect(mockSupabaseClient.from().order).toHaveBeenCalledWith('last_updated', { ascending: false })
-        expect(mockSupabaseClient.from().limit).toHaveBeenCalledWith(10)
+        expect(mockQuery.select).toHaveBeenCalledWith('*')
+        expect(mockQuery.order).toHaveBeenCalledWith('last_updated', { ascending: false })
+        expect(mockQuery.limit).toHaveBeenCalledWith(10)
       })
 
       it('should handle database errors', async () => {
         const mockError = new Error('Database connection failed')
         
-        mockSupabaseClient.from().select().order().limit().single.mockResolvedValue({
-          data: null,
-          error: mockError
+        mockQuery.limit.mockReturnValue({
+          ...mockQuery,
+          then: (resolve: any, reject: any) => reject(mockError)
         })
 
         await expect(repository.getCurrentRates()).rejects.toThrow('Database connection failed')
@@ -127,11 +133,15 @@ describe('Supabase Repositories', () => {
           }
         ]
 
-        const mockQuery = mockSupabaseClient.from()
-        mockQuery.select.mockResolvedValue({
-          data: mockHistoricalRates,
-          error: null,
-          count: 1
+        // Mock the chain methods to track calls and return proper values
+        // The order method is last in the chain, so it should return the promise
+        mockQuery.range.mockImplementation(() => mockQuery)
+        mockQuery.order.mockImplementation(() => {
+          return Promise.resolve({ 
+            data: mockHistoricalRates, 
+            error: null, 
+            count: 1 
+          })
         })
 
         const result = await repository.getHistoricalRates({
@@ -139,7 +149,7 @@ describe('Supabase Repositories', () => {
           endDate: '2024-01-31',
           rateType: 'official',
           limit: 25,
-          offset: 0
+          offset: 25
         })
 
         expect(result).toEqual({
@@ -149,14 +159,19 @@ describe('Supabase Repositories', () => {
         expect(mockQuery.gte).toHaveBeenCalledWith('recorded_at', '2024-01-01')
         expect(mockQuery.lte).toHaveBeenCalledWith('recorded_at', '2024-01-31')
         expect(mockQuery.eq).toHaveBeenCalledWith('rate_type', 'official')
-        expect(mockQuery.range).toHaveBeenCalledWith(0, 24)
+        expect(mockQuery.range).toHaveBeenCalledWith(25, 49)
       })
 
       it('should handle missing count', async () => {
-        mockSupabaseClient.from().select.mockResolvedValue({
-          data: [],
-          error: null,
-          count: null
+        mockQuery.select.mockImplementation(() => {
+          return {
+            ...mockQuery,
+            then: (resolve: any) => resolve({ 
+              data: [], 
+              error: null, 
+              count: null 
+            })
+          }
         })
 
         const result = await repository.getHistoricalRates({})
@@ -186,16 +201,15 @@ describe('Supabase Repositories', () => {
           last_updated: '2024-01-24T12:00:00Z'
         }
 
-        mockSupabaseClient.from().upsert().select().single.mockResolvedValue({
-          data: savedRate,
-          error: null
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: savedRate, error: null })
         })
 
         const result = await repository.saveRate(rateToSave)
 
         expect(result).toEqual(savedRate)
         expect(mockSupabaseClient.from).toHaveBeenCalledWith('exchange_rates')
-        expect(mockSupabaseClient.from().upsert).toHaveBeenCalledWith(
+        expect(mockQuery.upsert).toHaveBeenCalledWith(
           expect.objectContaining({
             ...rateToSave,
             last_updated: expect.any(String)
@@ -221,16 +235,15 @@ describe('Supabase Repositories', () => {
           recorded_at: '2024-01-24T12:00:00Z'
         }
 
-        mockSupabaseClient.from().insert().select().single.mockResolvedValue({
-          data: savedRate,
-          error: null
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: savedRate, error: null })
         })
 
         const result = await repository.saveHistoricalRate(rateToSave)
 
         expect(result).toEqual(savedRate)
         expect(mockSupabaseClient.from).toHaveBeenCalledWith('exchange_rates_history')
-        expect(mockSupabaseClient.from().insert).toHaveBeenCalledWith(
+        expect(mockQuery.insert).toHaveBeenCalledWith(
           expect.objectContaining({
             ...rateToSave,
             recorded_at: expect.any(String)
@@ -262,9 +275,8 @@ describe('Supabase Repositories', () => {
           updated_at: '2024-01-24T12:00:00Z'
         }
 
-        mockSupabaseClient.from().insert().select().single.mockResolvedValue({
-          data: createdSubscriber,
-          error: null
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: createdSubscriber, error: null })
         })
 
         const result = await repository.createSubscriber(subscriberToCreate)
@@ -286,21 +298,20 @@ describe('Supabase Repositories', () => {
           updated_at: '2024-01-24T13:00:00Z'
         }
 
-        mockSupabaseClient.from().update().eq().select().single.mockResolvedValue({
-          data: updatedSubscriber,
-          error: null
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: updatedSubscriber, error: null })
         })
 
         const result = await repository.updateSubscriber('sub-1', updateData)
 
         expect(result).toEqual(updatedSubscriber)
-        expect(mockSupabaseClient.from().update).toHaveBeenCalledWith(
+        expect(mockQuery.update).toHaveBeenCalledWith(
           expect.objectContaining({
             ...updateData,
             updated_at: expect.any(String)
           })
         )
-        expect(mockSupabaseClient.from().eq).toHaveBeenCalledWith('id', 'sub-1')
+        expect(mockQuery.eq).toHaveBeenCalledWith('id', 'sub-1')
       })
     })
 
@@ -317,15 +328,17 @@ describe('Supabase Repositories', () => {
           }
         ]
 
-        mockSupabaseClient.from().select().eq.mockResolvedValue({
-          data: activeSubscribers,
-          error: null
+        mockQuery.eq.mockImplementation(() => {
+          return {
+            ...mockQuery,
+            then: (resolve: any) => resolve({ data: activeSubscribers, error: null })
+          }
         })
 
         const result = await repository.getActiveSubscribers()
 
         expect(result).toEqual(activeSubscribers)
-        expect(mockSupabaseClient.from().eq).toHaveBeenCalledWith('is_active', true)
+        expect(mockQuery.eq).toHaveBeenCalledWith('is_active', true)
       })
     })
 
@@ -342,16 +355,18 @@ describe('Supabase Repositories', () => {
           }
         ]
 
-        mockSupabaseClient.from().select().eq().eq.mockResolvedValue({
-          data: telegramSubscribers,
-          error: null
+        mockQuery.eq.mockImplementation(() => {
+          return {
+            ...mockQuery,
+            then: (resolve: any) => resolve({ data: telegramSubscribers, error: null })
+          }
         })
 
         const result = await repository.getSubscribersByPlatform('telegram')
 
         expect(result).toEqual(telegramSubscribers)
-        expect(mockSupabaseClient.from().eq).toHaveBeenCalledWith('platform', 'telegram')
-        expect(mockSupabaseClient.from().eq).toHaveBeenCalledWith('is_active', true)
+        expect(mockQuery.eq).toHaveBeenCalledWith('platform', 'telegram')
+        expect(mockQuery.eq).toHaveBeenCalledWith('is_active', true)
       })
     })
   })
@@ -381,9 +396,8 @@ describe('Supabase Repositories', () => {
           updated_at: '2024-01-24T12:00:00Z'
         }
 
-        mockSupabaseClient.from().select().single.mockResolvedValue({
-          data: mockConfig,
-          error: null
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: mockConfig, error: null })
         })
 
         const result = await repository.getConfig()
@@ -393,9 +407,8 @@ describe('Supabase Repositories', () => {
       })
 
       it('should return null when no config exists', async () => {
-        mockSupabaseClient.from().select().single.mockResolvedValue({
-          data: null,
-          error: { code: 'PGRST116' } // Row not found error code
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: null, error: { code: 'PGRST116' } })
         })
 
         const result = await repository.getConfig()
@@ -423,9 +436,8 @@ describe('Supabase Repositories', () => {
           updated_at: '2024-01-24T13:00:00Z'
         }
 
-        mockSupabaseClient.from().upsert().select().single.mockResolvedValue({
-          data: updatedConfig,
-          error: null
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: updatedConfig, error: null })
         })
 
         const result = await repository.updateConfig(updateData)
@@ -458,9 +470,8 @@ describe('Supabase Repositories', () => {
           created_at: '2024-01-24T12:00:00Z'
         }
 
-        mockSupabaseClient.from().insert().select().single.mockResolvedValue({
-          data: createdNotification,
-          error: null
+        mockQuery.single.mockImplementation(() => {
+          return Promise.resolve({ data: createdNotification, error: null })
         })
 
         const result = await repository.createNotification(notificationToCreate)
@@ -472,15 +483,15 @@ describe('Supabase Repositories', () => {
 
     describe('markAsRead', () => {
       it('should mark notification as read', async () => {
-        mockSupabaseClient.from().update().eq.mockResolvedValue({
-          error: null
+        mockQuery.eq.mockImplementation(() => {
+          return Promise.resolve({ error: null })
         })
 
         await repository.markAsRead('alert-1')
 
         expect(mockSupabaseClient.from).toHaveBeenCalledWith('alert_notifications')
-        expect(mockSupabaseClient.from().update).toHaveBeenCalledWith({ is_read: true })
-        expect(mockSupabaseClient.from().eq).toHaveBeenCalledWith('id', 'alert-1')
+        expect(mockQuery.update).toHaveBeenCalledWith({ is_read: true })
+        expect(mockQuery.eq).toHaveBeenCalledWith('id', 'alert-1')
       })
     })
 
@@ -497,9 +508,11 @@ describe('Supabase Repositories', () => {
           }
         ]
 
-        mockSupabaseClient.from().select().eq().eq().order().limit().mockResolvedValue({
-          data: mockNotifications,
-          error: null
+        mockQuery.limit.mockImplementation(() => {
+          return {
+            ...mockQuery,
+            then: (resolve: any) => resolve({ data: mockNotifications, error: null })
+          }
         })
 
         const result = await repository.getNotifications({
@@ -509,9 +522,9 @@ describe('Supabase Repositories', () => {
         })
 
         expect(result).toEqual(mockNotifications)
-        expect(mockSupabaseClient.from().eq).toHaveBeenCalledWith('subscriber_id', 'sub-1')
-        expect(mockSupabaseClient.from().eq).toHaveBeenCalledWith('is_read', false)
-        expect(mockSupabaseClient.from().limit).toHaveBeenCalledWith(10)
+        expect(mockQuery.eq).toHaveBeenCalledWith('subscriber_id', 'sub-1')
+        expect(mockQuery.eq).toHaveBeenCalledWith('is_read', false)
+        expect(mockQuery.limit).toHaveBeenCalledWith(10)
       })
     })
   })

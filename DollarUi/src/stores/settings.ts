@@ -46,10 +46,17 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.removeItem('settings')
   }
 
+  async function initializeApp() {
+    loadSettings()
+    // Aquí se pueden agregar más inicializaciones
+    // como cargar configuración desde el backend
+  }
+
   return {
     settings,
     updateSetting,
     loadSettings,
-    resetSettings
+    resetSettings,
+    initializeApp
   }
 })

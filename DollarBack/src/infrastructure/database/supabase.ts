@@ -1,8 +1,7 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { 
   IExchangeRateRepository, 
   INotificationSubscriberRepository,
-  IScrapingSourceRepository,
   IAdminConfigRepository,
   IAlertNotificationRepository
 } from '@/domain/repositories'
@@ -257,7 +256,7 @@ export class SupabaseAlertNotificationRepository implements IAlertNotificationRe
     query = query.order('created_at', { ascending: false })
 
     if (params?.limit) query = query.limit(params.limit)
-    if (params?.offset) query = query.range(params.offset, params.offset + params.limit - 1)
+    if (params?.offset) query = query.range(params.offset, params.offset + (params.limit || 25) - 1)
 
     const { data, error } = await query
     if (error) throw error

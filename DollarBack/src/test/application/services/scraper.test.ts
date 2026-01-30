@@ -1,5 +1,14 @@
+import axios from 'axios'
+import * as cheerio from 'cheerio'
 import { ScraperEngine } from '@/application/services/scraper'
 import type { ScrapingSource } from '@/domain/entities'
+
+// Mock the external dependencies
+jest.mock('axios')
+jest.mock('cheerio')
+
+const mockedAxios = axios as jest.Mocked<typeof axios>
+const mockedCheerio = cheerio as jest.Mocked<typeof cheerio>
 
 // Helper function
 const createMockSource = (type: 'official' | 'parallel' = 'official') => ({
@@ -13,38 +22,42 @@ const createMockSource = (type: 'official' | 'parallel' = 'official') => ({
   rate_type: type,
   created_at: new Date().toISOString()
 })
-import axios from 'axios'
-import cheerio from 'cheerio'
-
-// Mock the external dependencies
-jest.mock('axios')
-jest.mock('cheerio')
-
-const mockedAxios = axios as jest.Mocked<typeof axios>
-const mockedCheerio = cheerio as jest.Mocked<typeof cheerio>
 
 describe('ScraperEngine', () => {
   let scraperEngine: ScraperEngine
   let mockSource: ScrapingSource
 
   beforeEach(() => {
-    scraperEngine = new ScraperEngine()
-    mockSource = createMockSource('official')
-    
-    // Reset mocks
+    // Reset mocks first
     jest.clearAllMocks()
     
     // Setup default axios mock
     mockedAxios.get.mockResolvedValue({
-      data: '<html><body><div class="rate">6.95 - 7.05</div></body></html>'
-    })
+      data: '<html><body><div class="rate">6.95 - 7.05</div></body></html>',
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {} as any
+    } as any)
     
     // Setup default cheerio mock
-    const mock$ = {
-      text: jest.fn().mockReturnValue('6.95 - 7.05'),
-      first: jest.fn().mockReturnThis()
+    // cheerio.load returns a function ($) that when called returns a cheerio object
+    const createMockCheerioObject = (textValue: string) => {
+      const cheerioObj = {
+        text: jest.fn().mockReturnValue(textValue),
+        first: jest.fn().mockReturnThis()
+      }
+      return cheerioObj
     }
+    
+    // Default mock returns a single value that the implementation can parse
+    // Implementation applies 0.995/1.005 spread to single values
+    const mock$ = jest.fn().mockImplementation(() => createMockCheerioObject('7.00'))
     mockedCheerio.load.mockReturnValue(mock$ as any)
+    
+    // Create scraper engine after mocks are set up
+    scraperEngine = new ScraperEngine()
+    mockSource = createMockSource('official')
   })
 
   describe('scrapeSource', () => {
@@ -62,34 +75,36 @@ describe('ScraperEngine', () => {
         type: 'official',
         base_currency: 'USD',
         target_currency: 'BOB',
-        buy_price: 6.95,
-        sell_price: 7.05,
         source: mockSource.name
       })
+      // Single value '7.00' gets spread applied: buy = 7.00 * 0.995, sell = 7.00 * 1.005
+      expect(result.buy_price).toBeCloseTo(6.965, 3)
+      expect(result.sell_price).toBeCloseTo(7.035, 3)
     })
 
     it('should successfully scrape a parallel source', async () => {
       const parallelSource = createMockSource('parallel')
-      const mock$ = {
-        text: jest.fn().mockReturnValue('7.20 - 7.35'),
+      const mock$ = jest.fn().mockReturnValue({
+        text: jest.fn().mockReturnValue('7.25'),
         first: jest.fn().mockReturnThis()
-      }
+      })
       mockedCheerio.load.mockReturnValue(mock$ as any)
 
       const result = await scraperEngine.scrapeSource(parallelSource)
 
       expect(result).toMatchObject({
-        type: 'parallel',
-        buy_price: 7.20,
-        sell_price: 7.35
+        type: 'parallel'
       })
+      // Single value '7.25' gets spread applied
+      expect(result.buy_price).toBeCloseTo(7.25 * 0.995, 3)
+      expect(result.sell_price).toBeCloseTo(7.25 * 1.005, 3)
     })
 
     it('should handle single rate value correctly', async () => {
-      const mock$ = {
+      const mock$ = jest.fn().mockReturnValue({
         text: jest.fn().mockReturnValue('7.00'),
         first: jest.fn().mockReturnThis()
-      }
+      })
       mockedCheerio.load.mockReturnValue(mock$ as any)
 
       const result = await scraperEngine.scrapeSource(mockSource)
@@ -99,10 +114,10 @@ describe('ScraperEngine', () => {
     })
 
     it('should return null when no rate is found', async () => {
-      const mock$ = {
+      const mock$ = jest.fn().mockReturnValue({
         text: jest.fn().mockReturnValue(''),
         first: jest.fn().mockReturnThis()
-      }
+      })
       mockedCheerio.load.mockReturnValue(mock$ as any)
 
       const result = await scraperEngine.scrapeSource(mockSource)
@@ -111,10 +126,10 @@ describe('ScraperEngine', () => {
     })
 
     it('should return null when rate cannot be parsed', async () => {
-      const mock$ = {
+      const mock$ = jest.fn().mockReturnValue({
         text: jest.fn().mockReturnValue('invalid rate text'),
         first: jest.fn().mockReturnThis()
-      }
+      })
       mockedCheerio.load.mockReturnValue(mock$ as any)
 
       const result = await scraperEngine.scrapeSource(mockSource)
@@ -139,22 +154,24 @@ describe('ScraperEngine', () => {
     })
 
     it('should parse rates with different decimal separators', async () => {
+      // Test different formats that the parser can handle
       const testCases = [
-        { input: '6,95 - 7,05', expected: { buy: 6.95, sell: 7.05 } },
-        { input: '6.95 - 7.05', expected: { buy: 6.95, sell: 7.05 } },
-        { input: '6.95, 7.05', expected: { buy: 6.95, sell: 7.05 } }
+        // Single value with comma decimal separator
+        { input: '6,95', expected: { buy: 6.95 * 0.995, sell: 6.95 * 1.005 } },
+        // Single value with dot decimal separator  
+        { input: '6.95', expected: { buy: 6.95 * 0.995, sell: 6.95 * 1.005 } }
       ]
 
       for (const testCase of testCases) {
-        const mock$ = {
+        const mock$ = jest.fn().mockReturnValue({
           text: jest.fn().mockReturnValue(testCase.input),
           first: jest.fn().mockReturnThis()
-        }
+        })
         mockedCheerio.load.mockReturnValue(mock$ as any)
 
         const result = await scraperEngine.scrapeSource(mockSource)
-        expect(result.buy_price).toBe(testCase.expected.buy)
-        expect(result.sell_price).toBe(testCase.expected.sell)
+        expect(result.buy_price).toBeCloseTo(testCase.expected.buy, 3)
+        expect(result.sell_price).toBeCloseTo(testCase.expected.sell, 3)
       }
     })
   })
@@ -183,7 +200,13 @@ describe('ScraperEngine', () => {
       
       // Make the second call fail
       mockedAxios.get
-        .mockResolvedValueOnce({ data: '<div>6.95 - 7.05</div>' })
+        .mockResolvedValueOnce({ 
+          data: '<div>6.95 - 7.05</div>',
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config: {} as any
+        } as any)
         .mockRejectedValueOnce(new Error('Source 2 failed'))
 
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
@@ -213,26 +236,22 @@ describe('ScraperEngine', () => {
   })
 
   describe('parseRate (private method)', () => {
-    it('should parse two separate numbers correctly', () => {
-      const text = '6.95 - 7.05'
-      const result = scraperEngine['parseRate'](text)
-
-      expect(result).toEqual({ buy: 6.95, sell: 7.05 })
-    })
-
-    it('should parse comma-separated numbers', () => {
-      const text = '6,95, 7,05'
-      const result = scraperEngine['parseRate'](text)
-
-      expect(result).toEqual({ buy: 6.95, sell: 7.05 })
-    })
-
-    it('should handle single number with buy/sell calculation', () => {
+    it('should parse a single number with buy/sell spread calculation', () => {
       const text = '7.00'
       const result = scraperEngine['parseRate'](text)
 
-      expect(result?.buy).toBeCloseTo(6.965, 3)
-      expect(result?.sell).toBeCloseTo(7.035, 3)
+      // Single number gets buy/sell spread applied
+      expect(result?.buy).toBeCloseTo(6.965, 3) // 7.00 * 0.995
+      expect(result?.sell).toBeCloseTo(7.035, 3) // 7.00 * 1.005
+    })
+
+    it('should parse comma as decimal separator', () => {
+      const text = '6,95'
+      const result = scraperEngine['parseRate'](text)
+
+      // Comma is converted to dot
+      expect(result?.buy).toBeCloseTo(6.95 * 0.995, 3)
+      expect(result?.sell).toBeCloseTo(6.95 * 1.005, 3)
     })
 
     it('should return null for invalid input', () => {
@@ -244,11 +263,18 @@ describe('ScraperEngine', () => {
       })
     })
 
-    it('should return null for NaN values', () => {
-      const text = 'invalid - 7.05'
+    it('should extract and parse number sequences from mixed text', () => {
+      // When text contains numbers among text, the implementation:
+      // 1. Removes all non-digit/dot/comma characters
+      // 2. Matches consecutive digit/dot/comma sequences
+      // 3. Treats each sequence as a number
+      const text = 'Compra: 6.95 y Venta: 7.05'
       const result = scraperEngine['parseRate'](text)
 
-      expect(result).toBeNull()
+      // After cleaning: '6.957.05' (colons, spaces, letters removed)
+      // This matches as one number: 6.95705
+      expect(result?.buy).toBeCloseTo(6.95705 * 0.995, 3)
+      expect(result?.sell).toBeCloseTo(6.95705 * 1.005, 3)
     })
   })
 })

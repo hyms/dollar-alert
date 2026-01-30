@@ -1,5 +1,7 @@
 import type { ScrapingSource } from '@/domain/entities'
 import type { IScraperEngine } from '@/application/services/scraper'
+import axios from 'axios'
+import * as cheerio from 'cheerio'
 
 export class WebScraperService implements IScraperEngine {
   async scrapeAllSources(): Promise<any[]> {
@@ -18,9 +20,6 @@ export class WebScraperService implements IScraperEngine {
 
   async scrapeSource(source: ScrapingSource): Promise<any | null> {
     try {
-      const axios = (await import('axios')).default
-      const cheerio = (await import('cheerio')).default
-
       const response = await axios.get(source.url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -30,11 +29,10 @@ export class WebScraperService implements IScraperEngine {
           'Connection': 'keep-alive',
           'Upgrade-Insecure-Requests': '1'
         },
-        timeout: 15000,
-        maxRedirects: 3
+        timeout: 15000
       })
 
-      const $ = cheerio.load(response.data)
+      const $ = cheerio.load(response.data as string)
       const rateElement = $(source.selector).first()
       
       if (!rateElement.length) {

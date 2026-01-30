@@ -1,14 +1,12 @@
 <!-- Default Layout for Main Application -->
 <template>
-  <v-app>
-    <AppToolbar />
-    
-    <v-main>
-      <router-view />
-    </v-main>
-    
-    <AppFooter />
-  </v-app>
+  <AppToolbar />
+  
+  <v-main>
+    <slot></slot>
+  </v-main>
+  
+  <AppFooter />
 </template>
 
 <script setup lang="ts">

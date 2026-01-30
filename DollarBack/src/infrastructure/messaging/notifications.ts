@@ -2,12 +2,12 @@ import { Telegraf, Context } from 'telegraf'
 import webpush from 'web-push'
 
 export class TelegramBotService {
-  private bot: Telegraf
+  private bot: Telegraf | null = null
   private isEnabled: boolean
 
   constructor(token?: string) {
     this.isEnabled = !!token
-    if (this.isEnabled) {
+    if (this.isEnabled && token) {
       this.bot = new Telegraf(token)
       this.setupCommands()
     } else {
@@ -16,6 +16,8 @@ export class TelegramBotService {
   }
 
   private setupCommands(): void {
+    if (!this.bot) return
+
     this.bot.start((ctx: Context) => {
       ctx.reply('¡Bienvenido a DollarAlert 🇧🇴!\n\n' +
         'Te enviaré alertas cuando el dólar cambie significativamente.\n\n' +
@@ -55,7 +57,7 @@ export class TelegramBotService {
   }
 
   async sendMessage(chatId: string, message: string): Promise<void> {
-    if (!this.isEnabled) {
+    if (!this.isEnabled || !this.bot) {
       console.warn(`Telegram bot disabled - message not sent to ${chatId}`)
       return
     }
@@ -63,7 +65,7 @@ export class TelegramBotService {
     try {
       await this.bot.telegram.sendMessage(chatId, message, {
         parse_mode: 'HTML',
-        disable_web_page_preview: true
+        link_preview_options: { is_disabled: true }
       })
     } catch (error) {
       console.error(`Error sending Telegram message to ${chatId}:`, error)
@@ -72,14 +74,14 @@ export class TelegramBotService {
   }
 
   async start(): Promise<void> {
-    if (this.isEnabled) {
+    if (this.isEnabled && this.bot) {
       await this.bot.launch()
       console.log('Telegram bot started successfully')
     }
   }
 
   async stop(): Promise<void> {
-    if (this.isEnabled) {
+    if (this.isEnabled && this.bot) {
       this.bot.stop('SIGINT')
       console.log('Telegram bot stopped')
     }

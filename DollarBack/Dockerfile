@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci
+RUN npm install --prefer-offline --no-audit --no-optional --no-fund
 
 # --- Development Stage ---
 FROM base AS development
@@ -19,6 +19,9 @@ ENV LOG_LEVEL=debug
 
 # Copy source code
 COPY . .
+
+# Install dev dependencies for development
+RUN npm install --prefer-offline --no-audit --no-optional --no-fund
 
 # Expose port
 EXPOSE 3000

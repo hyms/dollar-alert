@@ -1,0 +1,99 @@
+
+
+services:
+  # =================================
+  # Redis Service (Development)
+  # =================================
+  redis:
+    image: redis:7-alpine
+    container_name: dollaralert-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dollaralert-network
+    command: redis-server --appendonly yes
+
+  # =================================
+  # Backend Service (Development)
+  # =================================
+  backend:
+    build:
+      context: ./DollarBack
+      dockerfile: Dockerfile
+      target: development
+    container_name: dollaralert-backend-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      HOST: 0.0.0.0
+      FRONTEND_URL: http://localhost:5173
+      LOG_LEVEL: debug
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_EMAIL: ${VAPID_EMAIL}
+      JWT_SECRET: ${JWT_SECRET}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS}
+    env_file:
+      - .env
+    volumes:
+      - ./DollarBack/src:/app/src
+      - /app/node_modules
+    networks:
+      - dollaralert-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =================================
+  # Frontend Service (Development)
+  # =================================
+  frontend:
+    build:
+      context: ./DollarUi
+      dockerfile: Dockerfile
+      target: development
+    container_name: dollaralert-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+      CHOKIDAR_USEPOLLING: "true"
+    env_file:
+      - .env
+    volumes:
+      - ./DollarUi:/app
+      - /app/node_modules
+    networks:
+      - dollaralert-network
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  dollaralert-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local

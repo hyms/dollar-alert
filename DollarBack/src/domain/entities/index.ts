@@ -57,6 +57,7 @@ export interface AdminConfig {
   id: string
   admin_username: string
   admin_password_hash: string
+  admin_password?: string // Temporary field for password updates
   scraping_sources: ScrapingSource[]
   maintenance_mode: boolean
   site_config: {

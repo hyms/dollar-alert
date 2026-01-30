@@ -1,5 +1,5 @@
 import type { IExchangeRateRepository } from '@/domain/repositories'
-import type { ExchangeRate, HistoricalRate } from '@/domain/entities'
+import type { ExchangeRate } from '@/domain/entities'
 
 export interface IScrapingUseCase {
   execute(): Promise<ExchangeRate[]>
@@ -41,8 +41,7 @@ export class ScrapingUseCase implements IScrapingUseCase {
             target_currency: rate.target_currency,
             buy_price: rate.buy_price,
             sell_price: rate.sell_price,
-            average_price: rate.average_price,
-            recorded_at: rate.last_updated
+            average_price: rate.average_price
           })
 
           rates.push(rate)

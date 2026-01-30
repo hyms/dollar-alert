@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import env from '@fastify/env'
 import schedule from '@fastify/schedule'
+import jwt from '@fastify/jwt'
 import { createClient } from '@supabase/supabase-js'
 
 import { 
@@ -24,8 +25,7 @@ import { NotificationUseCase } from '@/application/use-cases/notification'
 import { AdminConfigUseCase } from '@/application/use-cases/admin'
 import { ScraperEngine } from '@/application/services/scraper'
 import { NotificationManager } from '@/application/services/notification'
-import { TelegramBotService, WebPushService } from '@/infrastructure/messaging/notifications'
-import { WebScraperService } from '@/infrastructure/external-api/webscraper'
+import { TelegramBotService } from '@/infrastructure/messaging/notifications'
 
 const server = Fastify({
   logger: {
@@ -44,7 +44,8 @@ const envSchema = {
     TELEGRAM_TOKEN: { type: 'string' },
     VAPID_PUBLIC_KEY: { type: 'string' },
     VAPID_PRIVATE_KEY: { type: 'string' },
-    LOG_LEVEL: { type: 'string', default: 'info' }
+    LOG_LEVEL: { type: 'string', default: 'info' },
+    JWT_SECRET: { type: 'string' }
   }
 }
 
@@ -62,6 +63,10 @@ async function buildApp() {
 
     await server.register(schedule)
 
+    await server.register(jwt, {
+      secret: process.env.JWT_SECRET!,
+    })
+
     const supabase = createClient(
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_KEY!
@@ -72,9 +77,7 @@ async function buildApp() {
     const adminConfigRepository = new SupabaseAdminConfigRepository(supabase)
     const alertNotificationRepository = new SupabaseAlertNotificationRepository(supabase)
 
-    const webScraperService = new WebScraperService()
     const telegramBotService = new TelegramBotService(process.env.TELEGRAM_TOKEN)
-    const webPushService = new WebPushService()
 
     const notificationManager = new NotificationManager()
     const scraperEngine = new ScraperEngine()
@@ -89,7 +92,7 @@ async function buildApp() {
 
     await telegramBotService.start()
 
-    server.get('/health', async (request, reply) => {
+    server.get('/health', async () => {
       return { 
         status: 'ok', 
         timestamp: new Date().toISOString(),
@@ -97,13 +100,20 @@ async function buildApp() {
       }
     })
 
-    registerRateRoutes(server, scrapingUseCase)
-    registerSubscriptionRoutes(server, notificationUseCase)
-    registerNotificationRoutes(server, notificationUseCase)
+    registerRateRoutes(server, scrapingUseCase, exchangeRateRepository)
+    registerSubscriptionRoutes(server, notificationUseCase, notificationSubscriberRepository)
+    registerNotificationRoutes(server, notificationUseCase, alertNotificationRepository)
     registerConfigRoutes(server, adminConfigUseCase)
     registerAuthRoutes(server, adminConfigUseCase)
 
     server.addHook('onRequest', async (request, reply) => {
+      if (request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
+        try {
+          await request.jwtVerify()
+        } catch (err) {
+          reply.send(err)
+        }
+      }
       const config = await adminConfigUseCase.getConfig()
       if (config?.maintenance_mode && request.url !== '/api/config' && !request.url.startsWith('/api/auth')) {
         reply.status(503).send({
@@ -112,6 +122,16 @@ async function buildApp() {
         })
         return
       }
+    })
+
+    server.addHook('preHandler', (request, reply, done) => {
+      if (request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
+        if (!request.headers.authorization) {
+          reply.status(401).send({ error: 'Unauthorized', message: 'Missing Authorization header' })
+          return
+        }
+      }
+      done()
     })
 
     server.setErrorHandler((error, request, reply) => {
@@ -128,7 +148,7 @@ async function buildApp() {
 
     return server
   } catch (error) {
-    server.log.error('Error building application:', error)
+    server.log.error(`Error building application: ${error}`)
     throw error
   }
 }

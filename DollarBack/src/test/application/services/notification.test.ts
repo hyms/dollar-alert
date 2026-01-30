@@ -1,5 +1,14 @@
+import { Telegraf } from 'telegraf'
+import webPush from 'web-push'
 import { NotificationManager } from '@/application/services/notification'
 import type { NotificationSubscriber } from '@/domain/entities'
+
+// Mock the external dependencies
+jest.mock('telegraf')
+jest.mock('web-push')
+
+const MockedTelegraf = Telegraf as jest.MockedClass<typeof Telegraf>
+const mockedWebPush = webPush as jest.Mocked<typeof webPush>
 
 // Helper function
 const createMockSource = (type: 'official' | 'parallel' = 'official') => ({
@@ -13,15 +22,6 @@ const createMockSource = (type: 'official' | 'parallel' = 'official') => ({
   rate_type: type,
   created_at: new Date().toISOString()
 })
-import { Telegraf } from 'telegraf'
-import webPush from 'web-push'
-
-// Mock the external dependencies
-jest.mock('telegraf')
-jest.mock('web-push')
-
-const MockedTelegraf = Telegraf as jest.MockedClass<typeof Telegraf>
-const mockedWebPush = webPush as jest.Mocked<typeof webPush>
 
 describe('NotificationManager', () => {
   let notificationManager: NotificationManager
@@ -317,27 +317,35 @@ describe('NotificationManager', () => {
   })
 
   describe('Telegram Initialization', () => {
-    it('should not initialize bot when TELEGRAM_TOKEN is missing', () => {
-      delete process.env.TELEGRAM_TOKEN
-      
+    it('should not initialize bot when TELEGRAM_TOKEN is missing', async () => {
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
       
+      delete process.env.TELEGRAM_TOKEN
+      
       const newManager = new NotificationManager()
+      
+      // Wait for async initialization to complete
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       expect(consoleSpy).toHaveBeenCalledWith('TELEGRAM_TOKEN not found, Telegram notifications disabled')
       expect(newManager['telegramBot']).toBeNull()
       
       consoleSpy.mockRestore()
+      // Restore TELEGRAM_TOKEN for other tests
+      process.env.TELEGRAM_TOKEN = 'test-token'
     })
 
-    it('should handle telegram initialization errors', () => {
+    it('should handle telegram initialization errors', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
+      
       MockedTelegraf.mockImplementation(() => {
         throw new Error('Telegram init error')
       })
       
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
-      
       new NotificationManager()
+      
+      // Wait for async initialization to complete
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       expect(consoleSpy).toHaveBeenCalledWith('Error initializing Telegram bot:', expect.any(Error))
       
