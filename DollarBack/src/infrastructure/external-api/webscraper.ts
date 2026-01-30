@@ -29,7 +29,7 @@ export class WebScraperService implements IScraperEngine {
           'Connection': 'keep-alive',
           'Upgrade-Insecure-Requests': '1'
         },
-        timeout: 15000
+        timeout: 20000
       })
 
       const $ = cheerio.load(response.data as string)
@@ -57,8 +57,21 @@ export class WebScraperService implements IScraperEngine {
         source: source.name,
         timestamp: new Date().toISOString()
       }
-    } catch (error) {
-      console.error(`Error scraping source ${source.name}:`, error)
+    } catch (err) {
+      const error = err as any
+      if (error && typeof error.isAxiosError === 'function' && error.isAxiosError()) {
+        if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
+          console.error(`Timeout scraping ${source.name}: La página es muy lenta o no responde`)
+        } else if (error.response) {
+          console.error(`HTTP ${error.response.status} error scraping ${source.name}: ${error.response.statusText}`)
+        } else if (error.request) {
+          console.error(`No response from ${source.name}: La página podría estar bloqueando peticiones`)
+        } else {
+          console.error(`Error scraping ${source.name}: ${error.message}`)
+        }
+      } else {
+        console.error(`Unexpected error scraping ${source.name}: ${error}`)
+      }
       return null
     }
   }

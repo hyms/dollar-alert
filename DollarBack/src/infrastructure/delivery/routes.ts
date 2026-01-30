@@ -1,4 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import axios from 'axios'
+import * as cheerio from 'cheerio'
 import type { IExchangeRateRepository, INotificationSubscriberRepository, IAlertNotificationRepository } from '@/domain/repositories'
 import type { ScrapingUseCase } from '@/application/use-cases/scraping'
 import type { NotificationUseCase } from '@/application/use-cases/notification'
@@ -38,6 +40,112 @@ export async function registerRateRoutes(
       return reply.send(rates)
     } catch (error) {
       fastify.log.error(error)
+      return reply.status(500).send({ error: 'Internal server error' })
+    }
+  })
+}
+
+// Temporary test endpoint for scraping verification
+export async function registerTestRoutes(
+  fastify: FastifyInstance,
+  adminConfigUseCase: AdminConfigUseCase
+) {
+  // GET /api/test/scrape - Test scraping functionality
+  fastify.get('/api/test/scrape', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const config = await adminConfigUseCase.getConfig()
+      const sources = config?.scraping_sources || []
+      
+      // If no sources in config, use default sources
+      const testSources = sources.length > 0 ? sources : [
+        {
+          id: 'bcb-test',
+          name: 'Banco Central de Bolivia',
+          url: 'https://www.bcb.gob.bo/',
+          selector: '.tipo-cambio',
+          currency: 'USD',
+          rate_type: 'official',
+          is_active: true
+        },
+        {
+          id: 'dolarbolivia-test',
+          name: 'Dolar Bolivia',
+          url: 'https://dolarbolivia.com/',
+          selector: '.col-md-6 .card .card-body .h3',
+          currency: 'USD',
+          rate_type: 'parallel',
+          is_active: true
+        }
+      ]
+      
+      const results: any[] = []
+      
+      for (const source of testSources) {
+        if (!source.is_active) continue
+        
+        try {
+          const response = await axios.get(source.url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            timeout: 20000
+          })
+          
+          const $ = cheerio.load(response.data as string)
+          const rateElement = $(source.selector).first()
+          
+          results.push({
+            source: source.name,
+            url: source.url,
+            selector: source.selector,
+            elementFound: rateElement.length > 0,
+            text: rateElement.length > 0 ? rateElement.text().trim() : null,
+            success: rateElement.length > 0
+          })
+        } catch (error) {
+            results.push({
+              source: source.name,
+              url: source.url,
+              selector: source.selector,
+              elementFound: false,
+              text: null,
+              success: false,
+              error: (error as any)?.isAxiosError?.() ? (error as any).message : 'Unknown error'
+            })
+        }
+      }
+      
+      return reply.send({
+        success: true,
+        tested: testSources.length,
+        results
+      })
+    } catch (error) {
+      fastify.log.error(`Test scrape error: ${error}`)
+      return reply.status(500).send({ error: 'Internal server error' })
+    }
+  })
+
+  // GET /api/test/config - Test JSONB parsing of scraping_sources
+  fastify.get('/api/test/config', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const config = await adminConfigUseCase.getConfig()
+      
+      if (!config) {
+        return reply.send({
+          success: true,
+          message: 'No config found, using defaults',
+          scraping_sources: []
+        })
+      }
+      
+      return reply.send({
+        success: true,
+        scraping_sources: config.scraping_sources,
+        source_count: Array.isArray(config.scraping_sources) ? config.scraping_sources.length : 0
+      })
+    } catch (error) {
+      fastify.log.error(`Config test error: ${error}`)
       return reply.status(500).send({ error: 'Internal server error' })
     }
   })

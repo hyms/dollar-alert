@@ -17,7 +17,8 @@ import {
   registerSubscriptionRoutes,
   registerNotificationRoutes,
   registerConfigRoutes,
-  registerAuthRoutes
+  registerAuthRoutes,
+  registerTestRoutes
 } from '@/infrastructure/delivery/routes'
 
 import { ScrapingUseCase } from '@/application/use-cases/scraping'
@@ -105,6 +106,7 @@ async function buildApp() {
     registerNotificationRoutes(server, notificationUseCase, alertNotificationRepository)
     registerConfigRoutes(server, adminConfigUseCase)
     registerAuthRoutes(server, adminConfigUseCase)
+    registerTestRoutes(server, adminConfigUseCase)
 
     server.addHook('onRequest', async (request, reply) => {
       if (request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
