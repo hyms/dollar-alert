@@ -1,13 +1,15 @@
 # Multi-stage Dockerfile for DollarUI (Vue 3 + Vite)
-# Simplified and optimized for development
+# Using npm for dependency installation
 
 # --- Base Stage ---
 FROM node:20-alpine AS base
 WORKDIR /app
 
-# Install dependencies
+# Copy package files
 COPY package*.json ./
-RUN npm ci
+
+# Install dependencies
+RUN npm install
 
 # --- Development Stage ---
 FROM base AS development
@@ -23,3 +25,19 @@ EXPOSE 5173
 
 # Start development server with HMR
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# --- Production Stage ---
+FROM base AS production
+ENV NODE_ENV=production
+
+# Copy source code
+COPY . .
+
+# Build application
+RUN npm run build
+
+# Expose port
+EXPOSE 80
+
+# Start production server
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "80"]

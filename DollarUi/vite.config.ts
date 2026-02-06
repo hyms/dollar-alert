@@ -1,19 +1,13 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
-import Components from 'unplugin-vue-components/vite'
-import { VuetifyResolver } from 'unplugin-vue-components/resolvers'
+import vuetify from 'vite-plugin-vuetify'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
-    Components({
-      resolvers: [
-        VuetifyResolver()
-      ],
-      include: [/\.vue$/, /\.vue\?vue/]
-    })
+    vuetify({ autoImport: true })
   ],
   resolve: {
     alias: {
@@ -21,8 +15,12 @@ export default defineConfig({
     }
   },
   server: {
+    host: '0.0.0.0', // CRÍTICO: Permite conexiones externas al contenedor
     port: 5173,
-    host: true
+    watch: {
+      usePolling: true, // Necesario para detectar cambios de archivos en Windows/WSL2
+    },
+    strictPort: true
   },
   build: {
     outDir: 'dist',

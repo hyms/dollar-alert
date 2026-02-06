@@ -21,9 +21,8 @@ services:
   # =================================
   backend:
     build:
-      context: ./DollarBack
-      dockerfile: Dockerfile
-      target: development
+      context: .
+      dockerfile: DollarBack/Dockerfile
     container_name: dollaralert-backend-dev
     restart: unless-stopped
     ports:
@@ -45,9 +44,6 @@ services:
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS}
     env_file:
       - .env
-    volumes:
-      - ./DollarBack/src:/app/src
-      - /app/node_modules
     networks:
       - dollaralert-network
     depends_on:
@@ -64,8 +60,8 @@ services:
   # =================================
   frontend:
     build:
-      context: ./DollarUi
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: DollarUi/Dockerfile
       target: development
     container_name: dollaralert-frontend-dev
     restart: unless-stopped
@@ -77,8 +73,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./DollarUi:/app
-      - /app/node_modules
+      - ./DollarUi:/DollarUi:cached
+      - frontend_pnpm_store:/DollarUi/.pnpm-store
     networks:
       - dollaralert-network
     depends_on:
@@ -96,4 +92,8 @@ networks:
 
 volumes:
   redis_data:
+    driver: local
+  backend_pnpm_store:
+    driver: local
+  frontend_pnpm_store:
     driver: local

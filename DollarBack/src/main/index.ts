@@ -78,7 +78,19 @@ async function buildApp() {
     const adminConfigRepository = new SupabaseAdminConfigRepository(supabase)
     const alertNotificationRepository = new SupabaseAlertNotificationRepository(supabase)
 
-    const telegramBotService = new TelegramBotService(process.env.TELEGRAM_TOKEN)
+    // Initialize Telegram bot only if valid token is provided
+    let telegramBotService: TelegramBotService | null = null
+    if (process.env.TELEGRAM_TOKEN && process.env.TELEGRAM_TOKEN !== 'your_telegram_bot_token_here') {
+      telegramBotService = new TelegramBotService(process.env.TELEGRAM_TOKEN)
+      try {
+        await telegramBotService.start()
+      } catch (error) {
+        server.log.warn('Failed to start Telegram bot, continuing without it:', error)
+        telegramBotService = null
+      }
+    } else {
+      server.log.info('Telegram bot not configured, skipping...')
+    }
 
     const notificationManager = new NotificationManager()
     const scraperEngine = new ScraperEngine()
@@ -90,8 +102,6 @@ async function buildApp() {
       notificationManager
     )
     const adminConfigUseCase = new AdminConfigUseCase(adminConfigRepository)
-
-    await telegramBotService.start()
 
     server.get('/health', async () => {
       return { 
@@ -145,7 +155,9 @@ async function buildApp() {
     })
 
     server.addHook('onClose', async () => {
-      await telegramBotService.stop()
+      if (telegramBotService) {
+        await telegramBotService.stop()
+      }
     })
 
     return server
