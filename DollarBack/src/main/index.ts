@@ -119,7 +119,10 @@ async function buildApp() {
     registerTestRoutes(server, adminConfigUseCase)
 
     server.addHook('onRequest', async (request, reply) => {
-      if (request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
+      const publicPaths = ['/health', '/api/auth/login', '/api/rates', '/api/test']
+      const isPublicPath = publicPaths.some(path => request.routerPath?.startsWith(path))
+      
+      if (!isPublicPath && request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
         try {
           await request.jwtVerify()
         } catch (err) {
@@ -127,7 +130,7 @@ async function buildApp() {
         }
       }
       const config = await adminConfigUseCase.getConfig()
-      if (config?.maintenance_mode && request.url !== '/api/config' && !request.url.startsWith('/api/auth')) {
+      if (config?.maintenance_mode && !isPublicPath && request.url !== '/api/config' && !request.url.startsWith('/api/auth')) {
         reply.status(503).send({
           error: 'Service Unavailable',
           message: config.site_config?.maintenance_message || 'System under maintenance'
@@ -137,7 +140,10 @@ async function buildApp() {
     })
 
     server.addHook('preHandler', (request, reply, done) => {
-      if (request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
+      const publicPaths = ['/health', '/api/auth/login', '/api/rates', '/api/test']
+      const isPublicPath = publicPaths.some(path => request.routerPath?.startsWith(path))
+      
+      if (!isPublicPath && request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
         if (!request.headers.authorization) {
           reply.status(401).send({ error: 'Unauthorized', message: 'Missing Authorization header' })
           return

@@ -13,10 +13,28 @@ export async function registerRateRoutes(
 ) {
   fastify.get('/api/rates/current', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const rates = await scrapingUseCase.execute()
+      // Try to scrape fresh rates first
+      let rates = await scrapingUseCase.execute()
+      
+      // If scraping failed or returned empty, get cached rates from database
+      if (!rates || rates.length === 0) {
+        fastify.log.warn('Scraping returned no rates, falling back to database')
+        rates = await exchangeRateRepository.getCurrentRates()
+      }
+      
       return reply.send(rates)
     } catch (error) {
       fastify.log.error(error)
+      // Fallback to database on error
+      try {
+        const cachedRates = await exchangeRateRepository.getCurrentRates()
+        if (cachedRates.length > 0) {
+          fastify.log.info('Returning cached rates from database')
+          return reply.send(cachedRates)
+        }
+      } catch (dbError) {
+        fastify.log.error(dbError)
+      }
       return reply.status(500).send({ error: 'Internal server error' })
     }
   })
