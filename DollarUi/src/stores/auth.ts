@@ -1,4 +1,3 @@
-import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 
 export interface User {
@@ -9,79 +8,79 @@ export interface User {
   is_active: boolean
 }
 
-export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
-  const token = ref<string | null>(null)
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+interface AuthState {
+  user: User | null
+  token: string | null
+  loading: boolean
+  error: string | null
+}
 
-  const isAuthenticated = computed(() => !!token.value && !!user.value)
-  const isAdmin = computed(() => user.value?.role === 'admin')
+export const useAuthStore = defineStore('auth', {
+  state: (): AuthState => ({
+    user: null,
+    token: null,
+    loading: false,
+    error: null
+  }),
 
-  async function login(email: string, password: string) {
-    loading.value = true
-    error.value = null
-    
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username: email, password })
-      })
-      
-      if (!response.ok) {
-        throw new Error('Credenciales inválidas')
+  getters: {
+    isAuthenticated: (state) => !!state.token && !!state.user,
+    isAdmin: (state) => state.user?.role === 'admin'
+  },
+
+  actions: {
+    async login(email: string, password: string) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username: email, password })
+        })
+
+        if (!response.ok) {
+          throw new Error('Credenciales inválidas')
+        }
+
+        const data = await response.json()
+
+        this.user = {
+          id: '1',
+          email: email,
+          role: 'admin',
+          is_active: true
+        }
+        this.token = data.token
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Error de autenticación'
+        console.error('Login error:', err)
+      } finally {
+        this.loading = false
       }
-      
-      const data = await response.json()
-      
-      user.value = {
-        id: '1',
-        email: email,
-        role: 'admin',
-        is_active: true
+    },
+
+    logout() {
+      this.user = null
+      this.token = null
+    },
+
+    initAuth() {
+      const storedToken = localStorage.getItem('auth_token')
+      const storedUser = localStorage.getItem('user')
+
+      if (storedToken && storedUser) {
+        this.token = storedToken
+        this.user = JSON.parse(storedUser)
       }
-      token.value = data.token
-      if (token.value) {
-        localStorage.setItem('auth_token', token.value)
-      }
-      localStorage.setItem('user', JSON.stringify(user.value))
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Error de autenticación'
-      console.error('Login error:', err)
-    } finally {
-      loading.value = false
     }
-  }
+  },
 
-  function logout() {
-    user.value = null
-    token.value = null
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('user')
-  }
-
-  function initAuth() {
-    const storedToken = localStorage.getItem('auth_token')
-    const storedUser = localStorage.getItem('user')
-    
-    if (storedToken && storedUser) {
-      token.value = storedToken
-      user.value = JSON.parse(storedUser)
-    }
-  }
-
-  return {
-    user,
-    token,
-    loading,
-    error,
-    isAuthenticated,
-    isAdmin,
-    login,
-    logout,
-    initAuth
+  persist: {
+    key: 'dollaralert-auth',
+    paths: ['user', 'token']
   }
 })

@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
+import bcrypt from 'bcryptjs'
 import type { IExchangeRateRepository, INotificationSubscriberRepository, IAlertNotificationRepository } from '@/domain/repositories'
 import type { ScrapingUseCase } from '@/application/use-cases/scraping'
 import type { NotificationUseCase } from '@/application/use-cases/notification'
@@ -500,6 +501,36 @@ export async function registerAuthRoutes(
   fastify.get('/api/auth/verify', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       return reply.send({ valid: true })
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: 'Internal server error' })
+    }
+  })
+
+  // Setup admin user endpoint (for initial setup only)
+  fastify.post('/api/auth/setup-admin', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { username, password } = request.body as { username: string; password: string }
+      
+      // Hash the password
+      const passwordHash = await bcrypt.hash(password, 10)
+      
+      // Update or create admin config
+      await adminConfigUseCase.updateConfig({
+        admin_username: username,
+        admin_password_hash: passwordHash,
+        scraping_sources: [],
+        maintenance_mode: false,
+        site_config: {
+          title: 'DollarAlert 🇧🇴',
+          maintenance_message: 'System under maintenance',
+          allowed_currencies: ['USD', 'BOB'],
+          max_subscriptions_per_user: 5,
+          notification_cooldown: 300
+        }
+      })
+      
+      return reply.send({ success: true, message: 'Admin user created successfully' })
     } catch (error) {
       fastify.log.error(error)
       return reply.status(500).send({ error: 'Internal server error' })

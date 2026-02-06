@@ -119,7 +119,7 @@ async function buildApp() {
     registerTestRoutes(server, adminConfigUseCase)
 
     server.addHook('onRequest', async (request, reply) => {
-      const publicPaths = ['/health', '/api/auth/login', '/api/rates', '/api/test']
+      const publicPaths = ['/health', '/api/auth/login', '/api/auth/setup-admin', '/api/rates', '/api/test']
       const isPublicPath = publicPaths.some(path => request.routerPath?.startsWith(path))
       
       if (!isPublicPath && request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
@@ -140,10 +140,10 @@ async function buildApp() {
     })
 
     server.addHook('preHandler', (request, reply, done) => {
-      const publicPaths = ['/health', '/api/auth/login', '/api/rates', '/api/test']
+      const publicPaths = ['/health', '/api/auth/login', '/api/auth/setup-admin', '/api/rates', '/api/test']
       const isPublicPath = publicPaths.some(path => request.routerPath?.startsWith(path))
       
-      if (!isPublicPath && request.routerPath && !['/api/auth/login', '/health'].includes(request.routerPath)) {
+      if (!isPublicPath && request.routerPath && !['/api/auth/login', '/api/auth/setup-admin', '/health'].includes(request.routerPath)) {
         if (!request.headers.authorization) {
           reply.status(401).send({ error: 'Unauthorized', message: 'Missing Authorization header' })
           return

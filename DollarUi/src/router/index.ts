@@ -35,6 +35,18 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/admin/scraping',
+      name: 'ScrapingSources',
+      component: () => import('@/views/AdminScrapingView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/admin/alerts',
+      name: 'AlertManagement',
+      component: () => import('@/views/AdminAlertsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/login',
       name: 'Login',
       component: () => import('@/views/LoginView.vue'),

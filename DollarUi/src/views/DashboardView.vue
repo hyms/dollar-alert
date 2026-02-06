@@ -108,17 +108,7 @@
 
       <v-row class="mt-6">
         <v-col cols="12" md="8">
-          <v-card>
-            <v-card-title>
-              <v-icon class="mr-2">mdi-chart-area</v-icon>
-              Tendencia Últimos 7 Días
-            </v-card-title>
-            <v-card-text>
-              <v-alert type="info" variant="tonal">
-                Gráfico de tendencias próximamente disponible
-              </v-alert>
-            </v-card-text>
-          </v-card>
+          <HistoryChart />
         </v-col>
         <v-col cols="12" md="4">
           <v-card>
@@ -128,7 +118,11 @@
             </v-card-title>
             <v-card-text>
               <v-alert type="success" variant="tonal">
-                Sin alertas nuevas
+                <template v-slot:prepend>
+                  <v-icon>mdi-bell-check</v-icon>
+                </template>
+                <div class="text-body1">Sin alertas nuevas</div>
+                <div class="text-caption text-grey">Las alertas de precio aparecerán aquí</div>
               </v-alert>
             </v-card-text>
           </v-card>
@@ -142,6 +136,7 @@ import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import type { ExchangeRate } from '@/types'
 import BinanceRateCard from '@/components/dashboard/BinanceRateCard.vue'
+import HistoryChart from '@/components/dashboard/HistoryChart.vue'
 import { useSettingsStore } from '@/stores/settings'
 
 // TODO: Replace mock data with API call
